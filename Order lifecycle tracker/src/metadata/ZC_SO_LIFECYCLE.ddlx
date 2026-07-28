@@ -1,0 +1,114 @@
+// =========================================================================
+// Extension   : ZC_SO_LIFECYCLE (metadata extension)
+// Purpose     : UI annotations for the Sales Order Lifecycle List Report
+// Layer       : Metadata Extension (.ddlx)
+// Target      : S/4HANA
+//
+// Notes:
+// - UI annotations are kept in this metadata extension rather than inside
+//   the consumption view, so UI changes don't require re-activating the
+//   view and the view stays reusable across apps. The view enables this
+//   with @Metadata.allowExtensions: true.
+// - LifecycleStage and DaysInCurrentStage are colored via @UI.criticality
+//   bound to StageCriticality (Fiori codes 1 = red, 2 = yellow, 3 = green).
+// - The Object Page has three facets: General Information (order/customer
+//   master data), Lifecycle Status (stage, day count, delivery/billing
+//   status), and Order Items (the item table via the _Item association).
+// =========================================================================
+
+@Metadata.layer: #CORE
+
+annotate view ZC_SO_LIFECYCLE with
+{
+  @UI.headerInfo: {
+    typeName: 'Sales Order',
+    typeNamePlural: 'Sales Orders',
+    title: { value: 'SalesOrder' },
+    description: { value: 'CustomerName' }
+  }
+
+  @UI.facet: [
+    {
+      id: 'GeneralInfo',
+      purpose: #STANDARD,
+      type: #FIELDGROUP_REFERENCE,
+      label: 'General Information',
+      targetQualifier: 'GeneralGroup',
+      position: 10
+    },
+    {
+      id: 'LifecycleInfo',
+      purpose: #STANDARD,
+      type: #FIELDGROUP_REFERENCE,
+      label: 'Lifecycle Status',
+      targetQualifier: 'LifecycleGroup',
+      position: 20
+    },
+    {
+      id: 'Items',
+      purpose: #STANDARD,
+      type: #LINEITEM_REFERENCE,
+      label: 'Order Items',
+      targetElement: '_Item',
+      position: 30
+    }
+  ]
+
+  @UI.lineItem: [{ position: 10 }]
+  @UI.selectionField: [{ position: 10 }]
+  SalesOrder;
+
+  // identification only - not shown as a List Report column
+  @UI.fieldGroup: [{ qualifier: 'GeneralGroup', position: 30 }]
+  SalesOrderType;
+
+  @UI.selectionField: [{ position: 30 }]
+  @UI.fieldGroup: [{ qualifier: 'GeneralGroup', position: 10 }]
+  Customer;
+
+  @UI.lineItem: [{ position: 20 }]
+  @UI.fieldGroup: [{ qualifier: 'GeneralGroup', position: 20 }]
+  CustomerName;
+
+  @UI.lineItem: [{ position: 30, criticality: 'StageCriticality' }]
+  @UI.selectionField: [{ position: 20 }]
+  @UI.fieldGroup: [{ qualifier: 'LifecycleGroup', position: 10, criticality: 'StageCriticality' }]
+  LifecycleStage;
+
+  @UI.lineItem: [{ position: 40, criticality: 'StageCriticality' }]
+  @UI.fieldGroup: [{ qualifier: 'LifecycleGroup', position: 20, criticality: 'StageCriticality' }]
+  DaysInCurrentStage;
+
+  @UI.lineItem: [{ position: 50 }]
+  @UI.fieldGroup: [{ qualifier: 'GeneralGroup', position: 40 }]
+  NetValue;
+
+  // semantic unit for NetValue - no separate List Report column
+  Currency;
+
+  @UI.lineItem: [{ position: 60 }]
+  @UI.selectionField: [{ position: 40 }]
+  @UI.fieldGroup: [{ qualifier: 'GeneralGroup', position: 50 }]
+  CreationDate;
+
+  @UI.fieldGroup: [{ qualifier: 'GeneralGroup', position: 60 }]
+  RequestedDelivDate;
+
+  @UI.lineItem: [{ position: 70 }]
+  @UI.fieldGroup: [{ qualifier: 'LifecycleGroup', position: 50 }]
+  LatestGoodsIssueDate;
+
+  @UI.selectionField: [{ position: 50 }]
+  @UI.fieldGroup: [{ qualifier: 'GeneralGroup', position: 70 }]
+  SalesOrganization;
+
+  @UI.fieldGroup: [{ qualifier: 'LifecycleGroup', position: 30 }]
+  DeliveryStatus;
+
+  @UI.fieldGroup: [{ qualifier: 'LifecycleGroup', position: 40 }]
+  BillingStatus;
+
+  // used only as the criticality source, not shown as a column
+  @UI.hidden: true
+  StageCriticality;
+}

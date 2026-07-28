@@ -1,0 +1,61 @@
+// =========================================================================
+// View        : ZI_BIL_ITEM
+// Purpose     : Billing Item - Interface View (CDS View Entity)
+// Layer       : Interface (I_)
+// Source      : VBRP - Billing Document: Item Data (with VBRK header via association)
+// Target      : S/4HANA
+//
+// Notes:
+// - This is a CDS view entity (define view entity), the recommended model
+//   for new S/4HANA development. It needs no separate SQL view name
+//   (no @AbapCatalog.sqlViewName).
+// - VBRP carries both a sales order reference (AUBEL / AUPOS) and a
+//   delivery reference (VGBEL / VGPOS). This project chains on the sales
+//   order reference, since the lifecycle is tracked from the order
+//   outwards; the delivery reference is still exposed so the full
+//   document flow can be reconstructed if needed.
+// - Header fields (FKDAT / FKART / WAERK) are projected from the
+//   _BillingHeader association via path expression rather than joining
+//   VBRK a second time as a separate source, to keep the view cheap.
+// - Both associations use [0..1] - a billing document can exist without a
+//   sales order reference (e.g. manually created invoices, credit memos).
+// - No UI annotations are added in this view. UI/field-control annotations
+//   belong in a separate metadata extension (@Metadata.layer / annotate
+//   view) layered on top of this interface view.
+// =========================================================================
+
+@AccessControl.authorizationCheck: #NOT_REQUIRED
+@EndUserText.label: 'Billing Item - Interface View'
+@VDM.viewType: #BASIC
+
+define view entity ZI_BIL_ITEM
+  as select from vbrp as BillingItem
+
+  association [0..1] to vbrk       as _BillingHeader
+    on $projection.BillingDocument = _BillingHeader.vbeln
+
+  association [0..1] to ZI_SO_ITEM as _SalesOrderItem
+    on  $projection.SourceSalesOrder     = _SalesOrderItem.SalesOrder
+    and $projection.SourceSalesOrderItem = _SalesOrderItem.SalesOrderItem
+
+{
+  key vbeln                as BillingDocument,
+  key posnr                as BillingDocumentItem,
+      aubel                as SourceSalesOrder,
+      aupos                as SourceSalesOrderItem,
+      vgbel                as SourceDelivery,
+      vgpos                as SourceDeliveryItem,
+      matnr                as Material,
+      fkimg                as BilledQuantity,
+      vrkme                as SalesUnit,
+      netwr                as ItemNetValue,
+
+      // header fields projected from association
+      _BillingHeader.fkdat as BillingDate,
+      _BillingHeader.fkart as BillingType,
+      _BillingHeader.waerk as Currency,
+
+      // expose associations
+      _BillingHeader,
+      _SalesOrderItem
+}

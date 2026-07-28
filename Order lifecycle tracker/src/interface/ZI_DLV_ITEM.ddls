@@ -1,0 +1,62 @@
+// =========================================================================
+// View        : ZI_DLV_ITEM
+// Purpose     : Delivery Item - Interface View (CDS View Entity)
+// Layer       : Interface (I_)
+// Source      : LIPS - Delivery: Item Data (with LIKP header via association)
+// Target      : S/4HANA
+//
+// Notes:
+// - This is a CDS view entity (define view entity), the recommended model
+//   for new S/4HANA development. It needs no separate SQL view name
+//   (no @AbapCatalog.sqlViewName).
+// - The goods movement date (WADAT_IST = actual goods issue date) is the
+//   key field that tells us whether goods issue has happened - a filled
+//   WADAT_IST means the goods have physically left.
+// - Header date fields (WADAT / WADAT_IST / LFDAT) are projected from the
+//   _DeliveryHeader association via path expression rather than joining
+//   LIKP a second time as a separate source, to keep the view cheap. The
+//   [0..1] cardinality ensures the path expression compiles to a LEFT OUTER
+//   JOIN returning at most one header row, so no row multiplication occurs.
+// - The _SalesOrderItem association uses [0..1] rather than [1..1] because
+//   VGBEL / VGPOS can be empty on deliveries created without a sales order
+//   reference (e.g. stock transfer deliveries, returns without an order).
+//   [0..1] describes the data honestly and avoids the compiler assuming a
+//   guarantee the data may not hold.
+// - No UI annotations are added in this view. UI/field-control annotations
+//   belong in a separate metadata extension (@Metadata.layer / annotate
+//   view) layered on top of this interface view.
+// =========================================================================
+
+@AccessControl.authorizationCheck: #NOT_REQUIRED
+@EndUserText.label: 'Delivery Item - Interface View'
+@VDM.viewType: #BASIC
+
+define view entity ZI_DLV_ITEM
+  as select from lips as DeliveryItem
+
+  association [0..1] to likp       as _DeliveryHeader
+    on $projection.Delivery = _DeliveryHeader.vbeln
+
+  association [0..1] to ZI_SO_ITEM as _SalesOrderItem
+    on  $projection.SourceSalesOrder     = _SalesOrderItem.SalesOrder
+    and $projection.SourceSalesOrderItem = _SalesOrderItem.SalesOrderItem
+
+{
+  key vbeln                    as Delivery,
+  key posnr                    as DeliveryItem,
+      vgbel                    as SourceSalesOrder,
+      vgpos                    as SourceSalesOrderItem,
+      matnr                    as Material,
+      lfimg                    as DeliveryQuantity,
+      vrkme                    as SalesUnit,
+      werks                    as Plant,
+
+      // header dates projected from association
+      _DeliveryHeader.wadat     as PlannedGoodsIssueDate,
+      _DeliveryHeader.wadat_ist as ActualGoodsIssueDate,
+      _DeliveryHeader.lfdat     as DeliveryDate,
+
+      // expose associations
+      _DeliveryHeader,
+      _SalesOrderItem
+}

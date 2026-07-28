@@ -1,0 +1,48 @@
+// =========================================================================
+// View        : ZI_SO_ITEM
+// Purpose     : Sales Order Item - Interface View (CDS View Entity)
+// Layer       : Interface (I_)
+// Source      : VBAP - Sales Document: Item Data
+// Target      : S/4HANA
+//
+// Notes:
+// - This is a CDS view entity (define view entity), the recommended model
+//   for new S/4HANA development. It needs no separate SQL view name
+//   (no @AbapCatalog.sqlViewName).
+// - This view targets S/4HANA. In S/4HANA the item-level delivery and
+//   billing status fields (LFSTA / FKSTA / GBSTA) live directly on VBAP.
+//   In ECC these statuses were only available on VBUP (Sales Document:
+//   Item Status table), so this simplified single-source approach would
+//   not have worked there.
+// - No UI annotations are added in this view. UI/field-control annotations
+//   belong in a separate metadata extension (@Metadata.layer / annotate
+//   view) layered on top of this interface view.
+// =========================================================================
+
+@AccessControl.authorizationCheck: #NOT_REQUIRED
+@EndUserText.label: 'Sales Order Item - Interface View'
+@VDM.viewType: #BASIC
+
+define view entity ZI_SO_ITEM
+  as select from vbap as SalesOrderItem
+
+  association [1..1] to ZI_SO_HEADER as _SalesOrder
+    on $projection.SalesOrder = _SalesOrder.SalesOrder
+
+{
+  key vbeln              as SalesOrder,
+  key posnr              as SalesOrderItem,
+      matnr               as Material,
+      arktx               as ItemDescription,
+      kwmeng              as OrderQuantity,
+      vrkme               as SalesUnit,
+      netwr               as ItemNetValue,
+      waerk               as Currency,
+      werks               as Plant,
+      lfsta               as ItemDeliveryStatus,
+      fksta               as ItemBillingStatus,
+      gbsta               as ItemOverallStatus,
+
+      // expose association
+      _SalesOrder
+} 

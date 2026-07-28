@@ -1,0 +1,27 @@
+// =========================================================================
+// Service Definition : ZUI_SO_LIFECYCLE
+// Purpose             : Exposes the Sales Order Lifecycle views as an
+//                       OData service
+// Layer               : Service Definition (.srvd)
+// Target              : S/4HANA (OData V4)
+//
+// Notes:
+// - Exposes the header lifecycle view (ZC_SO_LIFECYCLE) as the main entity
+//   and the item lifecycle view (ZC_SO_LIFECYCLE_ITEM) as the child, so
+//   Fiori Elements can render a List Report (orders) + Object Page
+//   (order + its items).
+// - Read-only service - no RAP behavior definition is bound here, since the
+//   underlying views are plain projection/consumption CDS view entities,
+//   not RAP-managed business objects.
+// - Only the two consumption views are exposed; the interface (I_) and
+//   composite base views stay internal to the CDS layer and are not part
+//   of the service surface.
+// - The 'as' aliases give short, stable external names for the OData
+//   entity sets, decoupled from the internal Z... view names.
+// =========================================================================
+
+@EndUserText.label: 'Sales Order Lifecycle Service'
+define service ZUI_SO_LIFECYCLE {
+  expose ZC_SO_LIFECYCLE      as SalesOrderLifecycle;
+  expose ZC_SO_LIFECYCLE_ITEM as SalesOrderLifecycleItem;
+}

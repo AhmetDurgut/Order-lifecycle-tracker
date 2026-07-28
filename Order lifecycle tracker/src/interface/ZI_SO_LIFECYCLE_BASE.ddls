@@ -1,0 +1,130 @@
+// =========================================================================
+// View        : ZI_SO_LIFECYCLE_BASE
+// Purpose     : Sales Order Lifecycle Base - Interface View (CDS View Entity)
+// Layer       : Interface (I_)
+// Source      : ZI_SO_HEADER + ZI_SO_DELIVERY_AGGR_HDR
+// Target      : S/4HANA
+//
+// Notes:
+// - This base view centralises the stage + day-count logic so the
+//   consumption view never repeats it. StageReferenceDate is computed and
+//   used here to derive DaysInCurrentStage in the same view - CDS allows
+//   reusing a field's underlying expression across view layers, but never
+//   between sibling calculated fields in the same view, hence the split
+//   into this dedicated base view.
+// - DaysInCurrentStage uses $session.system_date; on some S/4HANA
+//   releases a date input parameter may be preferred instead, but session
+//   date is fine on current releases.
+// - CDS view entity, no SQL view name needed.
+// =========================================================================
+
+@AccessControl.authorizationCheck: #NOT_REQUIRED
+@EndUserText.label: 'Sales Order Lifecycle Base'
+@VDM.viewType: #COMPOSITE
+
+define view entity ZI_SO_LIFECYCLE_BASE
+  as select from ZI_SO_HEADER as SalesOrder
+
+  association [0..1] to ZI_SO_DELIVERY_AGGR_HDR as _DeliveryAggr
+    on $projection.SalesOrder = _DeliveryAggr.SalesOrder
+
+{
+  key SalesOrder,
+      SalesOrderType,
+      CreationDate,
+      RequestedDelivDate,
+      Customer,
+      _Customer.name1                     as CustomerName,
+      NetValue,
+      Currency,
+      SalesOrganization,
+      DistributionChannel,
+      Division,
+      DeliveryStatus,
+      BillingStatus,
+      OverallStatus,
+      _DeliveryAggr.LatestGoodsIssueDate   as LatestGoodsIssueDate,
+
+      // -----------------------------------------------------------------
+      // LifecycleStage - derived from delivery/billing status plus
+      // whether goods issue has actually happened (via the delivery
+      // aggregation), not just whether a delivery document exists.
+      // -----------------------------------------------------------------
+      case
+        when DeliveryStatus = 'A'
+          then cast( 'ORDER_CREATED' as abap.char( 20 ) )
+        when DeliveryStatus = 'B'
+          then cast( 'PARTIALLY_DELIVERED' as abap.char( 20 ) )
+        when DeliveryStatus = 'C' and _DeliveryAggr.LatestGoodsIssueDate is initial
+          then cast( 'DELIVERED' as abap.char( 20 ) )
+        when     DeliveryStatus = 'C'
+             and _DeliveryAggr.LatestGoodsIssueDate is not initial
+             and BillingStatus = 'A'
+          then cast( 'GOODS_ISSUED' as abap.char( 20 ) )
+        when BillingStatus = 'B'
+          then cast( 'PARTIALLY_INVOICED' as abap.char( 20 ) )
+        when BillingStatus = 'C'
+          then cast( 'INVOICED' as abap.char( 20 ) )
+        else cast( 'UNKNOWN' as abap.char( 20 ) )
+      end                                  as LifecycleStage,
+
+      // -----------------------------------------------------------------
+      // StageReferenceDate - the date "days in stage" is counted from.
+      // Repeats the same stage conditions rather than referencing
+      // LifecycleStage, since sibling calculated fields cannot be
+      // referenced within one view.
+      // -----------------------------------------------------------------
+      case
+        when     DeliveryStatus = 'C'
+             and _DeliveryAggr.LatestGoodsIssueDate is not initial
+             and BillingStatus = 'A'
+          then _DeliveryAggr.LatestGoodsIssueDate
+        when BillingStatus = 'B'
+          then _DeliveryAggr.LatestGoodsIssueDate
+        else CreationDate
+      end                                  as StageReferenceDate,
+
+      // -----------------------------------------------------------------
+      // DaysInCurrentStage - the ONLY place the day count is computed.
+      // Downstream views (e.g. ZC_SO_LIFECYCLE) read this field directly
+      // instead of recomputing it. INVOICED is complete, so it is forced
+      // to 0. The StageReferenceDate CASE is inlined again here because
+      // sibling calculated fields cannot be referenced, but the result is
+      // guarded against an initial reference date before dats_days_between
+      // is ever called.
+      // -----------------------------------------------------------------
+      case
+        when BillingStatus = 'C'
+          then cast( 0 as abap.int4 )
+        when
+          case
+            when     DeliveryStatus = 'C'
+                 and _DeliveryAggr.LatestGoodsIssueDate is not initial
+                 and BillingStatus = 'A'
+              then _DeliveryAggr.LatestGoodsIssueDate
+            when BillingStatus = 'B'
+              then _DeliveryAggr.LatestGoodsIssueDate
+            else CreationDate
+          end is initial
+          then cast( 0 as abap.int4 )
+        else
+          cast(
+            dats_days_between(
+              case
+                when     DeliveryStatus = 'C'
+                     and _DeliveryAggr.LatestGoodsIssueDate is not initial
+                     and BillingStatus = 'A'
+                  then _DeliveryAggr.LatestGoodsIssueDate
+                when BillingStatus = 'B'
+                  then _DeliveryAggr.LatestGoodsIssueDate
+                else CreationDate
+              end,
+              $session.system_date
+            ) as abap.int4
+          )
+      end                                  as DaysInCurrentStage,
+
+      // expose associations
+      _Customer,
+      _DeliveryAggr
+}

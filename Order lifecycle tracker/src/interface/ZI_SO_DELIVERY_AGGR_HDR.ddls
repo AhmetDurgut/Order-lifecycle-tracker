@@ -1,0 +1,34 @@
+// =========================================================================
+// View        : ZI_SO_DELIVERY_AGGR_HDR
+// Purpose     : Sales Order Delivery Aggregation (Header Level) - Interface View (CDS View Entity)
+// Layer       : Interface (I_)
+// Source      : ZI_SO_DELIVERY_AGGR (item-level delivery aggregation) grouped by sales order
+// Target      : S/4HANA
+//
+// Notes:
+// - The item-level aggregation is rolled up once more to order-header level
+//   so the header lifecycle view can associate to exactly one row per sales
+//   order (no row multiplication).
+// - LatestGoodsIssueDate = MAX across all items - if initial, no goods issue
+//   has happened on any item of the order yet.
+// - CDS view entity, no SQL view name needed.
+// =========================================================================
+
+@AccessControl.authorizationCheck: #NOT_REQUIRED
+@EndUserText.label: 'Sales Order Delivery Aggregation (Header)'
+@VDM.viewType: #COMPOSITE
+
+define view entity ZI_SO_DELIVERY_AGGR_HDR
+  as select from ZI_SO_DELIVERY_AGGR as ItemAggr
+
+{
+  key SalesOrder                        as SalesOrder,
+
+      // aggregations
+      max( LatestGoodsIssueDate )       as LatestGoodsIssueDate,
+      sum( TotalDeliveredQuantity )     as TotalDeliveredQuantity,
+      count( * )                        as DeliveredItemCount
+}
+
+group by
+  SalesOrder

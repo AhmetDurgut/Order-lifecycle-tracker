@@ -1,0 +1,54 @@
+// =========================================================================
+// View        : ZI_SO_HEADER
+// Purpose     : Sales Order Header - Interface View (CDS View Entity)
+// Layer       : Interface (I_)
+// Source      : VBAK - Sales Document: Header Data
+// Target      : S/4HANA
+//
+// Notes:
+// - This is a CDS view entity (define view entity), the recommended model
+//   for new S/4HANA development. Unlike the classic CDS view syntax, it
+//   needs no separate SQL view name (no @AbapCatalog.sqlViewName).
+// - This view targets S/4HANA. In S/4HANA the overall delivery and billing
+//   status fields (LFSTK / FKSTK) live directly on VBAK. In ECC these
+//   statuses were only available on VBUK (Sales Document: Header Status
+//   and Administrative Data), so this simplified single-source approach
+//   would not have worked there.
+// - VKORG / VTWEG / SPART (Sales Organization / Distribution Channel /
+//   Division) are exposed here even though this is a foundation view,
+//   because the DCL authorization view added later filters authorization
+//   checks on Sales Organization - those fields must be projected for
+//   the DCL to be able to reference them.
+// - No UI annotations are added in this view. UI/field-control annotations
+//   belong in a separate metadata extension (@Metadata.layer / annotate
+//   view) layered on top of this interface view.
+// =========================================================================
+
+@AccessControl.authorizationCheck: #NOT_REQUIRED
+@EndUserText.label: 'Sales Order Header - Interface View'
+@VDM.viewType: #BASIC
+
+define view entity ZI_SO_HEADER
+  as select from vbak as SalesOrder
+
+  association [0..1] to kna1 as _Customer
+    on _Customer.kunnr = $projection.Customer
+
+{
+  key vbeln              as SalesOrder,
+      auart               as SalesOrderType,
+      erdat               as CreationDate,
+      vdatu               as RequestedDelivDate,
+      kunnr               as Customer,
+      netwr               as NetValue,
+      waerk               as Currency,
+      vkorg               as SalesOrganization,
+      vtweg               as DistributionChannel,
+      spart               as Division,
+      lfstk               as DeliveryStatus,
+      fkstk               as BillingStatus,
+      gbstk               as OverallStatus,
+
+      // expose association
+      _Customer
+}

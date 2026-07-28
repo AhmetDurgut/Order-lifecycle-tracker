@@ -1,0 +1,61 @@
+// =========================================================================
+// View        : ZI_DOC_FLOW
+// Purpose     : Sales Document Flow - Interface View (CDS View Entity)
+// Layer       : Interface (I_)
+// Source      : VBFA - Sales Document Flow
+// Target      : S/4HANA
+//
+// Notes:
+// - This is a CDS view entity (define view entity), the recommended model
+//   for new S/4HANA development. It needs no separate SQL view name
+//   (no @AbapCatalog.sqlViewName).
+// - VBFA links every kind of follow-on document (deliveries, invoices,
+//   returns, credit memos, WBS elements...). This view filters VBTYP_N to
+//   'J' (delivery) and 'M' (invoice) only, which are the two steps this
+//   lifecycle tracker cares about.
+// - VBFA's key is at item level (VBELV + POSNV + VBELN + POSNN + VBTYP_N),
+//   so this view naturally links a sales order item to a delivery/billing
+//   item.
+// - DocumentCategory is a calculated field translating the technical
+//   VBTYP_N code into a readable value, so consuming views and the UI
+//   don't have to repeat the CASE.
+// - No UI annotations are added in this view. UI/field-control annotations
+//   belong in a separate metadata extension (@Metadata.layer / annotate
+//   view) layered on top of this interface view.
+// =========================================================================
+
+@AccessControl.authorizationCheck: #NOT_REQUIRED
+@EndUserText.label: 'Sales Document Flow - Interface View'
+@VDM.viewType: #COMPOSITE
+
+define view entity ZI_DOC_FLOW
+  as select from vbfa as DocumentFlow
+
+  association [0..1] to ZI_SO_ITEM as _SalesOrderItem
+    on  $projection.PrecedingDocument     = _SalesOrderItem.SalesOrder
+    and $projection.PrecedingDocumentItem = _SalesOrderItem.SalesOrderItem
+
+{
+  key vbelv                                   as PrecedingDocument,
+  key posnv                                   as PrecedingDocumentItem,
+  key vbeln                                   as SubsequentDocument,
+  key posnn                                   as SubsequentDocumentItem,
+  key vbtyp_n                                 as SubsequentDocumentType,
+      vbtyp_v                                 as PrecedingDocumentType,
+      rfmng                                   as ReferenceQuantity,
+      meins                                   as BaseUnit,
+      erdat                                   as CreationDate,
+
+      // calculated: readable document category
+      case vbtyp_n
+        when 'J' then cast( 'DELIVERY' as abap.char( 10 ) )
+        when 'M' then cast( 'INVOICE'  as abap.char( 10 ) )
+        else           cast( ''        as abap.char( 10 ) )
+      end                                      as DocumentCategory,
+
+      // expose association
+      _SalesOrderItem
+}
+where
+      vbtyp_n = 'J'
+   or vbtyp_n = 'M'

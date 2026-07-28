@@ -1,0 +1,42 @@
+// =========================================================================
+// View        : ZI_SO_DELIVERY_AGGR
+// Purpose     : Sales Order Delivery Aggregation - Interface View (CDS View Entity)
+// Layer       : Interface (I_)
+// Source      : ZI_DLV_ITEM (delivery items) grouped by source sales order item
+// Target      : S/4HANA
+//
+// Notes:
+// - This view answers two questions per sales order item - how much has been
+//   delivered, and whether goods issue has physically happened (via the
+//   latest actual goods issue date). The lifecycle consumption view needs
+//   this to tell DELIVERED (delivery exists) apart from GOODS_ISSUED (goods
+//   have left).
+// - Grouped at item level (SourceSalesOrder + SourceSalesOrderItem) so both
+//   the header and item lifecycle views can reuse it.
+// - MAX(ActualGoodsIssueDate) - if this is null/initial, goods issue has not
+//   happened yet even though a delivery may exist.
+// - CDS view entity, no SQL view name needed.
+// =========================================================================
+
+@AccessControl.authorizationCheck: #NOT_REQUIRED
+@EndUserText.label: 'Sales Order Delivery Aggregation'
+@VDM.viewType: #COMPOSITE
+
+define view entity ZI_SO_DELIVERY_AGGR
+  as select from ZI_DLV_ITEM as DeliveryItem
+
+  where SourceSalesOrder <> ''
+
+{
+  key SourceSalesOrder                as SalesOrder,
+  key SourceSalesOrderItem            as SalesOrderItem,
+
+      // aggregations
+      max( ActualGoodsIssueDate )     as LatestGoodsIssueDate,
+      sum( DeliveryQuantity )         as TotalDeliveredQuantity,
+      count( * )                      as DeliveryItemCount
+}
+
+group by
+  SourceSalesOrder,
+  SourceSalesOrderItem

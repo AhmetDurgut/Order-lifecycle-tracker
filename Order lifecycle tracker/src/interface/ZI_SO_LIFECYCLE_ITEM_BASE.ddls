@@ -1,0 +1,143 @@
+// =========================================================================
+// View        : ZI_SO_LIFECYCLE_ITEM_BASE
+// Purpose     : Sales Order Lifecycle Item Base - Interface View (CDS View Entity)
+// Layer       : Interface (I_)
+// Source      : ZI_SO_ITEM + ZI_SO_DELIVERY_AGGR (item-level goods issue info)
+// Target      : S/4HANA
+//
+// Notes:
+// - Item-level counterpart of ZI_SO_LIFECYCLE_BASE. Same stage and
+//   day-count logic, but driven by the item's own status fields
+//   (ItemDeliveryStatus / ItemBillingStatus) and the item-level delivery
+//   aggregation - no header roll-up needed, since ZI_SO_DELIVERY_AGGR is
+//   already keyed by SalesOrder + SalesOrderItem.
+// - Like the header base view, the day count is centralised here so the
+//   item consumption view never repeats it. StageReferenceDate's CASE is
+//   inlined inside dats_days_between because CDS cannot reference sibling
+//   calculated fields.
+// - VBAP (via ZI_SO_ITEM) carries no item creation date of its own, so for
+//   the "waiting for delivery" stages (ORDER_CREATED / PARTIALLY_DELIVERED
+//   / DELIVERED) there is no reliable item-level start date. The header's
+//   CreationDate is used instead, projected via the _SalesOrder
+//   association.
+// - DaysInCurrentStage uses $session.system_date.
+// - CDS view entity, no SQL view name needed.
+// =========================================================================
+
+@AccessControl.authorizationCheck: #NOT_REQUIRED
+@EndUserText.label: 'Sales Order Lifecycle Item Base'
+@VDM.viewType: #COMPOSITE
+
+define view entity ZI_SO_LIFECYCLE_ITEM_BASE
+  as select from ZI_SO_ITEM as SalesOrderItem
+
+  association [0..1] to ZI_SO_DELIVERY_AGGR as _DeliveryAggr
+    on  $projection.SalesOrder     = _DeliveryAggr.SalesOrder
+    and $projection.SalesOrderItem = _DeliveryAggr.SalesOrderItem
+
+  association [1..1] to ZI_SO_HEADER as _SalesOrder
+    on $projection.SalesOrder = _SalesOrder.SalesOrder
+
+{
+  key SalesOrder,
+  key SalesOrderItem,
+      Material,
+      ItemDescription,
+      OrderQuantity,
+      SalesUnit,
+      ItemNetValue,
+      Currency,
+      Plant,
+      ItemDeliveryStatus,
+      ItemBillingStatus,
+      ItemOverallStatus,
+      _SalesOrder.CreationDate              as CreationDate,
+      _DeliveryAggr.LatestGoodsIssueDate    as LatestGoodsIssueDate,
+      _DeliveryAggr.TotalDeliveredQuantity  as TotalDeliveredQuantity,
+
+      // -----------------------------------------------------------------
+      // LifecycleStage - derived from the ITEM's own delivery/billing
+      // status plus whether goods issue has actually happened for this
+      // item (via the item-level delivery aggregation), not just whether
+      // a delivery document exists.
+      // -----------------------------------------------------------------
+      case
+        when ItemDeliveryStatus = 'A'
+          then cast( 'ORDER_CREATED' as abap.char( 20 ) )
+        when ItemDeliveryStatus = 'B'
+          then cast( 'PARTIALLY_DELIVERED' as abap.char( 20 ) )
+        when ItemDeliveryStatus = 'C' and _DeliveryAggr.LatestGoodsIssueDate is initial
+          then cast( 'DELIVERED' as abap.char( 20 ) )
+        when     ItemDeliveryStatus = 'C'
+             and _DeliveryAggr.LatestGoodsIssueDate is not initial
+             and ItemBillingStatus = 'A'
+          then cast( 'GOODS_ISSUED' as abap.char( 20 ) )
+        when ItemBillingStatus = 'B'
+          then cast( 'PARTIALLY_INVOICED' as abap.char( 20 ) )
+        when ItemBillingStatus = 'C'
+          then cast( 'INVOICED' as abap.char( 20 ) )
+        else cast( 'UNKNOWN' as abap.char( 20 ) )
+      end                                    as LifecycleStage,
+
+      // -----------------------------------------------------------------
+      // StageReferenceDate - the date "days in stage" is counted from.
+      // Repeats the same stage conditions rather than referencing
+      // LifecycleStage, since sibling calculated fields cannot be
+      // referenced within one view. Falls back to the header's
+      // CreationDate (via _SalesOrder) since VBAP has no item creation
+      // date of its own.
+      // -----------------------------------------------------------------
+      case
+        when     ItemDeliveryStatus = 'C'
+             and _DeliveryAggr.LatestGoodsIssueDate is not initial
+             and ItemBillingStatus = 'A'
+          then _DeliveryAggr.LatestGoodsIssueDate
+        when ItemBillingStatus = 'B'
+          then _DeliveryAggr.LatestGoodsIssueDate
+        else _SalesOrder.CreationDate
+      end                                    as StageReferenceDate,
+
+      // -----------------------------------------------------------------
+      // DaysInCurrentStage - the ONLY place the item-level day count is
+      // computed. Downstream views read this field directly instead of
+      // recomputing it. INVOICED is complete, so it is forced to 0. The
+      // StageReferenceDate CASE is inlined again here because sibling
+      // calculated fields cannot be referenced, but the result is
+      // guarded against an initial reference date before
+      // dats_days_between is ever called.
+      // -----------------------------------------------------------------
+      case
+        when ItemBillingStatus = 'C'
+          then cast( 0 as abap.int4 )
+        when
+          case
+            when     ItemDeliveryStatus = 'C'
+                 and _DeliveryAggr.LatestGoodsIssueDate is not initial
+                 and ItemBillingStatus = 'A'
+              then _DeliveryAggr.LatestGoodsIssueDate
+            when ItemBillingStatus = 'B'
+              then _DeliveryAggr.LatestGoodsIssueDate
+            else _SalesOrder.CreationDate
+          end is initial
+          then cast( 0 as abap.int4 )
+        else
+          cast(
+            dats_days_between(
+              case
+                when     ItemDeliveryStatus = 'C'
+                     and _DeliveryAggr.LatestGoodsIssueDate is not initial
+                     and ItemBillingStatus = 'A'
+                  then _DeliveryAggr.LatestGoodsIssueDate
+                when ItemBillingStatus = 'B'
+                  then _DeliveryAggr.LatestGoodsIssueDate
+                else _SalesOrder.CreationDate
+              end,
+              $session.system_date
+            ) as abap.int4
+          )
+      end                                    as DaysInCurrentStage,
+
+      // expose associations
+      _SalesOrder,
+      _DeliveryAggr
+}

@@ -1,0 +1,117 @@
+// =========================================================================
+// View        : ZC_SO_LIFECYCLE
+// Purpose     : Sales Order Lifecycle - Consumption View (CDS View Entity)
+// Layer       : Consumption (C_)
+// Source      : ZI_SO_LIFECYCLE_BASE
+// Target      : S/4HANA
+//
+// Notes:
+// - One row per sales order. Stage and DaysInCurrentStage come
+//   pre-computed from the base view; only StageCriticality is derived
+//   here, directly from DaysInCurrentStage (no repeated day-count logic
+//   anymore - see ZI_SO_LIFECYCLE_BASE for the single source of truth).
+// - StageCriticality uses Fiori criticality codes: 1 = red (negative),
+//   2 = yellow (critical), 3 = green (positive). Thresholds differ per
+//   stage because a delivery waiting 5 days is not as serious as an
+//   invoice waiting 5 days.
+// - UI annotations live in a separate metadata extension (ZC_SO_LIFECYCLE,
+//   ddlx) layered on top of this view - hence @Metadata.allowExtensions.
+// - The _Item association ([0..*] to ZC_SO_LIFECYCLE_ITEM) enables the
+//   Object Page item table in Fiori Elements (header -> items navigation).
+// - NetValue carries amount semantics tied to Currency
+//   (@Semantics.amount.currencyCode), so Fiori Elements renders it as a
+//   currency-formatted amount instead of a plain number.
+// =========================================================================
+
+@AccessControl.authorizationCheck: #CHECK
+@Metadata.allowExtensions: true
+@EndUserText.label: 'Sales Order Lifecycle'
+@VDM.viewType: #CONSUMPTION
+
+define view entity ZC_SO_LIFECYCLE
+  as select from ZI_SO_LIFECYCLE_BASE as Lifecycle
+
+  association [0..*] to ZC_SO_LIFECYCLE_ITEM as _Item
+    on $projection.SalesOrder = _Item.SalesOrder
+
+{
+  key SalesOrder,
+      SalesOrderType,
+      CreationDate,
+      RequestedDelivDate,
+      Customer,
+      CustomerName,
+      @Semantics.amount.currencyCode: 'Currency'
+      NetValue,
+      @Semantics.currencyCode: true
+      Currency,
+      SalesOrganization,
+      DistributionChannel,
+      Division,
+      DeliveryStatus,
+      BillingStatus,
+      OverallStatus,
+      LatestGoodsIssueDate,
+      LifecycleStage,
+      DaysInCurrentStage,
+
+      // -----------------------------------------------------------------
+      // StageCriticality - Fiori criticality codes (1 = red, 2 = yellow,
+      // 3 = green). Outer CASE selects the stage (already computed in
+      // the base view), inner CASE applies the stage-specific day
+      // thresholds to the already-computed DaysInCurrentStage - no
+      // day-count recomputation needed here.
+      // -----------------------------------------------------------------
+      case
+        // ORDER_CREATED: 0-1 green, 2-4 yellow, else red
+        when LifecycleStage = 'ORDER_CREATED'
+          then case
+                 when DaysInCurrentStage <= 1 then cast( 3 as abap.int1 )
+                 when DaysInCurrentStage <= 4 then cast( 2 as abap.int1 )
+                 else cast( 1 as abap.int1 )
+               end
+
+        // PARTIALLY_DELIVERED: 0-2 green, 3-6 yellow, else red
+        when LifecycleStage = 'PARTIALLY_DELIVERED'
+          then case
+                 when DaysInCurrentStage <= 2 then cast( 3 as abap.int1 )
+                 when DaysInCurrentStage <= 6 then cast( 2 as abap.int1 )
+                 else cast( 1 as abap.int1 )
+               end
+
+        // DELIVERED: 0 green, 1-2 yellow, else red
+        when LifecycleStage = 'DELIVERED'
+          then case
+                 when DaysInCurrentStage = 0  then cast( 3 as abap.int1 )
+                 when DaysInCurrentStage <= 2 then cast( 2 as abap.int1 )
+                 else cast( 1 as abap.int1 )
+               end
+
+        // GOODS_ISSUED: 0-2 green, 3-6 yellow, else red
+        when LifecycleStage = 'GOODS_ISSUED'
+          then case
+                 when DaysInCurrentStage <= 2 then cast( 3 as abap.int1 )
+                 when DaysInCurrentStage <= 6 then cast( 2 as abap.int1 )
+                 else cast( 1 as abap.int1 )
+               end
+
+        // PARTIALLY_INVOICED: 0-4 green, 5-9 yellow, else red
+        when LifecycleStage = 'PARTIALLY_INVOICED'
+          then case
+                 when DaysInCurrentStage <= 4 then cast( 3 as abap.int1 )
+                 when DaysInCurrentStage <= 9 then cast( 2 as abap.int1 )
+                 else cast( 1 as abap.int1 )
+               end
+
+        // INVOICED: always green - lifecycle complete
+        when LifecycleStage = 'INVOICED'
+          then cast( 3 as abap.int1 )
+
+        // UNKNOWN / anything else: default green (no signal to escalate on)
+        else cast( 3 as abap.int1 )
+      end                                  as StageCriticality,
+
+      // expose associations
+      _Customer,
+      _Item
+}

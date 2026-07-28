@@ -1,0 +1,72 @@
+// =========================================================================
+// Extension   : ZC_SO_LIFECYCLE_ITEM (metadata extension)
+// Purpose     : UI annotations for the order item table on the Object Page
+// Layer       : Metadata Extension (.ddlx)
+// Target      : S/4HANA
+//
+// Notes:
+// - These @UI.lineItem annotations render the item table inside the
+//   "Order Items" facet of the ZC_SO_LIFECYCLE Object Page (reached via
+//   the header's _Item association).
+// - Each item shows its OWN lifecycle stage and criticality, so a user
+//   can see which specific item is holding up the order (e.g. one item
+//   delivered, another not).
+// - LifecycleStage and item DaysInCurrentStage are colored via
+//   StageCriticality (Fiori codes 1 = red, 2 = yellow, 3 = green).
+// =========================================================================
+
+@Metadata.layer: #CORE
+
+annotate view ZC_SO_LIFECYCLE_ITEM with
+{
+  @UI.headerInfo: {
+    typeName: 'Order Item',
+    typeNamePlural: 'Order Items',
+    title: { value: 'SalesOrderItem' },
+    description: { value: 'ItemDescription' }
+  }
+
+  // parent key - not shown as its own item table column
+  @UI.hidden: true
+  SalesOrder;
+
+  @UI.lineItem: [{ position: 10 }]
+  SalesOrderItem;
+
+  @UI.lineItem: [{ position: 20 }]
+  Material;
+
+  @UI.lineItem: [{ position: 30 }]
+  ItemDescription;
+
+  @UI.lineItem: [{ position: 40 }]
+  OrderQuantity;
+
+  // semantic unit for OrderQuantity - no separate item table column
+  SalesUnit;
+
+  @UI.lineItem: [{ position: 50, criticality: 'StageCriticality' }]
+  LifecycleStage;
+
+  @UI.lineItem: [{ position: 60, criticality: 'StageCriticality' }]
+  DaysInCurrentStage;
+
+  @UI.lineItem: [{ position: 70 }]
+  ItemDeliveryStatus;
+
+  @UI.lineItem: [{ position: 80 }]
+  ItemBillingStatus;
+
+  @UI.lineItem: [{ position: 90 }]
+  ItemNetValue;
+
+  // semantic unit for ItemNetValue - no separate item table column
+  Currency;
+
+  @UI.lineItem: [{ position: 100 }]
+  LatestGoodsIssueDate;
+
+  // used only as the criticality source, not shown as a column
+  @UI.hidden: true
+  StageCriticality;
+}
